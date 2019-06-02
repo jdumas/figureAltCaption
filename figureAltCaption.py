@@ -30,68 +30,39 @@ would generate a figure like this:
 
 from __future__ import unicode_literals
 from markdown import Extension
-# from markdown.inlinepatterns import IMAGE_LINK_RE, IMAGE_REFERENCE_RE
-from markdown.blockprocessors import BlockProcessor
+from markdown.inlinepatterns import LinkInlineProcessor, IMAGE_LINK_RE
 from markdown.util import etree
-from markdown import util as md_util
-import re  # regex
-
-import logging
-logger = logging.getLogger('MARKDOWN')
 
 
-NOBRACKET = r'[^\]\[]*'
-BRK = (
-    r'\[(' +
-    (NOBRACKET + r'(\[') * 6 +
-    (NOBRACKET + r'\])*') * 6 +
-    NOBRACKET + r')\]'
-)
-IMAGE_LINK_RE = r'\!' + BRK + r'\s*\(\s*(<.*?>|([^"\)\s]+\s*"[^"]*"|[^\)\s]*))\s*\)'
-IMAGE_REFERENCE_RE = r'\!' + BRK + r'\s?\[([^\]]*)\]'
+class FigureCaptionInlineProcessor(LinkInlineProcessor):
+    """ Return a img element from the given match. """
 
-# is: linestart, any whitespace (even none), image, any whitespace (even none), line ends.
-FIGURES = [u'^\s*' + IMAGE_LINK_RE + u'\s*$',
-           u'^\s*' + IMAGE_REFERENCE_RE + u'\s*$']
+    def handleMatch(self, m, data):
+        text, index, handled = self.getText(data, m.end(0))
+        if not handled:
+            return None, None, None
 
+        src, title, index, handled = self.getLink(data, index)
+        if not handled:
+            return None, None, None
 
-# This is the core part of the extension
-class OldFigureCaptionProcessor(BlockProcessor):
-    FIGURES_RE = re.compile('|'.join(f for f in FIGURES))
+        figure = etree.Element('figure')
+        img = etree.SubElement(figure, "img")
+        caption = etree.SubElement(figure, "figcaption")
 
-    def test(self, parent, block):  # is the block relevant
-        # If there is an image and the image is alone in the paragraph, and the image doesn't already have a figure parent, return True
-        isImage = bool(self.FIGURES_RE.search(block))
-        isOnlyOneLine = (len(block.splitlines()) == 1)
-        isInFigure = (parent.tag == 'figure')
+        img.set("src", src)
 
-        # print(block, isImage, isOnlyOneLine, isInFigure, "T,T,F")
-        if (isImage and isOnlyOneLine and not isInFigure):
-            return True
-        else:
-            return False
+        if title is not None:
+            img.set("title", title)
 
-    def run(self, parent, blocks):  # how to process the block?
-        raw_block = blocks.pop(0)
-        captionText = self.FIGURES_RE.search(raw_block).group(1)
-
-        # create figure
-        figure = etree.SubElement(parent, 'figure')
-
-        # render image in figure
-        figure.text = raw_block
-
-        # create caption
-        figcaptionElem = etree.SubElement(figure, 'figcaption')
-        # no clue why the text itself turns out as html again and not raw. Anyhow, it suits me, the blockparsers annoyingly wrapped everything into <p>.
-        figcaptionElem.text = captionText
+        caption.text = text
+        return figure, m.start(0), index
 
 
 class FigureCaptionExtension(Extension):
-    def extendMarkdown(self, md, md_globals):
-        """ Add an instance of FigcaptionProcessor to BlockParser. """
-        md.parser.blockprocessors.register(OldFigureCaptionProcessor(md.parser), 'figureAltcaption', 200)
-        # md.inlinePatterns.register(FigureCaptionProcessor(IMAGE_LINK_RE, md), 'figureAltcaption', 190)
+    def extendMarkdown(self, md, __md_globals):
+        """ Add an instance of AltCaptionInlineProcessor to InlinePatterns. """
+        md.inlinePatterns.register(FigureCaptionInlineProcessor(IMAGE_LINK_RE, md), 'figureAltcaption', 155)
         md.registerExtension(self)
 
 
