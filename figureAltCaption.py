@@ -39,7 +39,7 @@ class FigureCaptionInlineProcessor(LinkInlineProcessor):
 
     def handleMatch(self, m, data):
         text, index, handled = self.getText(data, m.end(0))
-        if not handled:
+        if not handled or not text:
             return None, None, None
 
         src, title, index, handled = self.getLink(data, index)
